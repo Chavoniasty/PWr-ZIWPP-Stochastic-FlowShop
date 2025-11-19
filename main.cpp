@@ -1,119 +1,183 @@
+#include <algorithm>
+#include <cmath>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
-#include <vector>
+#include <numeric>
 #include <random>
+#include <string>
+#include <vector>
 
-class Task {
-   public:
-   std::vector<float> subTask;
+using namespace std;
+
+struct Job {
+  int id;
+  vector<double> means;
+  vector<double> stds;
 };
 
-std::vector<Task> generateRandomData(int machineNum, int tasksNum) {
-    float expectedValue = 4;
-    float standardDeviation = 2.5;
-    std::random_device rd;
-    std::mt19937 generator(rd());
-    std::normal_distribution<float> distribution(expectedValue, standardDeviation);
+class ProblemInstance {
+ public:
+  int n_jobs;
+  int n_machines;
+  vector<Job> jobs;
 
-    std::vector<Task>tasks (tasksNum);
-    for (int i = 0; i < tasksNum; i++) {
-        for (int j = 0; j < machineNum; j++) {
-            // for now its split like that instead of one-liner since its possible
-            // to better contol returned value from distribution to avoid negative
-            // numbers - current version depends on changing expected value and
-            // standard devation to minimize number of negative values
-            float newValue = distribution(generator);
-            tasks[i].subTask.push_back(newValue);
-        }
+  bool loadFromFile(const string& filename) {
+    ifstream file(filename);
+    if (!file.is_open()) return false;
+
+    if (!(file >> n_jobs >> n_machines)) return false;
+
+    jobs.resize(n_jobs);
+
+    for (int i = 0; i < n_jobs; i++) {
+      jobs[i].id = i;
+      jobs[i].means.resize(n_machines);
+      for (int j = 0; j < n_machines; j++) {
+        file >> jobs[i].means[j];
+      }
     }
 
-    return tasks;
-}
-
-float calculateCost(std::vector<Task> Tasks, int machineNum) {
-    std::random_device rd;
-    std::mt19937 generator(rd());
-    std::uniform_real_distribution<float> distribution(0.0f, 10.0f);
-
-    return distribution(generator);
-}
-
-
-float getInitialTemperature(std::vector<Task> sequence) {
-    std::uniform_int_distribution<> indexDist(0, sequence.size() - 1);
-    std::random_device rd;
-    std::mt19937 rng(rd());
-    float sum = 0;
-
-    for (int i = 0; i < 100; i++) {
-        int index1 = indexDist(rng);
-        int index2 = indexDist(rng);
-        std::swap(sequence[index1], sequence[index2]);
-        sum += calculateCost(sequence, 3);
+    for (int i = 0; i < n_jobs; i++) {
+      jobs[i].stds.resize(n_machines);
+      for (int j = 0; j < n_machines; j++) {
+        file >> jobs[i].stds[j];
+      }
     }
-    return (-1 * (sum / 100)) / std::log(0.9);
-}
+    return true;
+  }
+};
 
+double estimateMakespan(const ProblemInstance& inst,
+                        const vector<int>& permutation, int samples = 50) {
+  static mt19937 rng(42);
+  double totalMakespan = 0.0;
 
-std::vector<Task> anneal(std::vector<Task> solution) {
-    std::uniform_real_distribution<> dist(0.0f, 1.0f);
-    std::random_device rd;
-    std::mt19937 rng(rd());
-    std::uniform_int_distribution<> indexDist(0, solution.size() - 1);
+  for (int k = 0; k < samples; k++) {
+    vector<double> machineFreeTime(inst.n_machines, 0.0);
 
-    double probability = 0.2;
-    bool acceptCondition = false;
+    for (int jobIdx : permutation) {
+      const Job& job = inst.jobs[jobIdx];
 
-    std::vector<Task> bestSolution = solution;
-    float bestCost = calculateCost(solution, 3);
-    float prevCost = calculateCost(solution, 3);
+      double prevMachineFinishTime = 0.0;
 
-    float currentCost;
-    float alpha = 0.98;
-    float temperature = getInitialTemperature(solution);
+      for (int m = 0; m < inst.n_machines; m++) {
+        normal_distribution<double> dist(job.means[m], job.stds[m]);
+        double processingTime = dist(rng);
+        if (processingTime < 0.001) processingTime = 0.001;
 
+        double startTime = max(machineFreeTime[m], prevMachineFinishTime);
 
-    while (temperature > 0.1) {
-        int index1 = indexDist(rng);
-        int index2 = indexDist(rng);
-        std::swap(solution[index1], solution[index2]);
-        currentCost = calculateCost(solution, 3);
-
-        if (currentCost > prevCost) {
-            acceptCondition = dist(rng) >= std::exp((currentCost - prevCost) / temperature) ? true : false;
-        }
-        if (currentCost <= prevCost || acceptCondition) {
-            prevCost = currentCost;
-
-            if (bestCost > prevCost) {
-                bestCost = prevCost;
-                bestSolution = solution;
-            }
-        } else {
-            std::cout << "swap xdd" << std::endl;
-            std::swap(solution[index1], solution[index2]);
-        }
-        temperature *= alpha;
+        machineFreeTime[m] = startTime + processingTime;
+        prevMachineFinishTime = machineFreeTime[m];
+      }
     }
 
-    return bestSolution;
+    totalMakespan += machineFreeTime.back();
+  }
+
+  return totalMakespan / samples;
 }
 
+double calculateInitialTemperature(const ProblemInstance& inst, vector<int>& p,
+                                   double initialCost) {
+  return initialCost * 0.05;
+}
 
+vector<int> simulatedAnnealing(const ProblemInstance& inst) {
+  vector<int> currentSol(inst.n_jobs);
+  iota(currentSol.begin(), currentSol.end(), 0);
 
-int main() {
-    int machineNum = 3;
+  int mcSamplesFast = 30;
 
-    std::vector<Task> tasks = generateRandomData(machineNum, 5);
-    std::vector<Task> solution = tasks;
-    anneal(solution);
+  double currentCost = estimateMakespan(inst, currentSol, mcSamplesFast);
 
-    // display for debugging
-    for(auto elem: tasks) {
-        for (auto elemTask: elem.subTask) {
-            std::cout << elemTask << " ";
+  vector<int> bestSol = currentSol;
+  double bestCost = currentCost;
+
+  double T = calculateInitialTemperature(inst, currentSol, currentCost);
+  double T_end = 0.1;
+  double alpha = 0.97;
+  int iterPerTemp = 100;
+
+  mt19937 rng(random_device{}());
+  uniform_real_distribution<double> dist01(0.0, 1.0);
+  uniform_int_distribution<int> distIdx(0, inst.n_jobs - 1);
+
+  cout << "Start SA. Koszt poczatkowy: " << currentCost << ", T0: " << T
+       << endl;
+
+  while (T > T_end) {
+    for (int i = 0; i < iterPerTemp; i++) {
+      vector<int> neighbor = currentSol;
+      int a = distIdx(rng);
+      int b = distIdx(rng);
+      swap(neighbor[a], neighbor[b]);
+
+      double neighborCost = estimateMakespan(inst, neighbor, mcSamplesFast);
+
+      double delta = neighborCost - currentCost;
+
+      bool accept = false;
+      if (delta < 0) {
+        accept = true;
+      } else {
+        double probability = exp(-delta / T);
+        if (dist01(rng) < probability) {
+          accept = true;
         }
-        std::cout << std::endl;
+      }
+
+      if (accept) {
+        currentSol = neighbor;
+        currentCost = neighborCost;
+
+        if (currentCost < bestCost) {
+          bestCost = currentCost;
+          bestSol = currentSol;
+          cout << "Nowy rekord: " << bestCost << " (T=" << T << ")" << endl;
+        }
+      }
     }
 
-    return 0;
+    T *= alpha;
+  }
+
+  return bestSol;
+}
+
+int main(int argc, char* argv[]) {
+  string filename;
+
+  if (argc < 2) {
+    cerr << "Użycie: " << (argc ? argv[0] : "program") << " <plik_wejsciowy>"
+         << endl;
+    return 1;
+  }
+
+  filename = argv[1];
+  ProblemInstance problem;
+
+  cout << "Wczytywanie danych z " << filename << "..." << endl;
+  if (!problem.loadFromFile(filename)) {
+    cerr << "Blad: Nie znaleziono pliku!" << endl;
+    return 1;
+  }
+
+  cout << "Zaladowano instancje: " << problem.n_jobs << " zadan, "
+       << problem.n_machines << " maszyn." << endl;
+
+  vector<int> bestPermutation = simulatedAnnealing(problem);
+
+  double finalResult = estimateMakespan(problem, bestPermutation, 1000);
+
+  cout << "\n--- WYNIKI ---" << endl;
+  cout << "Najlepszy znaleziony Makespan (estymowany): " << finalResult << endl;
+  cout << "Kolejnosc zadan: ";
+  for (int id : bestPermutation) {
+    cout << id << " ";
+  }
+  cout << endl;
+
+  return 0;
 }

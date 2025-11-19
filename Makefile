@@ -1,2 +1,2 @@
 build:
-	@g++ main.cpp
+	@g++ -O3 main.cpp -o flowshop
