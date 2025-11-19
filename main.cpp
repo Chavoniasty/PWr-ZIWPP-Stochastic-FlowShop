@@ -28,6 +28,13 @@ class ProblemInstance {
 
     if (!(file >> n_jobs >> n_machines)) return false;
 
+    if (n_jobs <= 0 || n_machines <= 0 || n_jobs > 100000 ||
+        n_machines > 1000) {
+      cerr << "BLAD: Podejrzane wymiary: " << n_jobs << "x" << n_machines
+           << endl;
+      return false;
+    }
+
     jobs.resize(n_jobs);
 
     for (int i = 0; i < n_jobs; i++) {
@@ -84,13 +91,11 @@ double calculateInitialTemperature(const ProblemInstance& inst, vector<int>& p,
   return initialCost * 0.05;
 }
 
-vector<int> simulatedAnnealing(const ProblemInstance& inst) {
+vector<int> simulatedAnnealing(const ProblemInstance& inst, int mcSamples) {
   vector<int> currentSol(inst.n_jobs);
   iota(currentSol.begin(), currentSol.end(), 0);
 
-  int mcSamplesFast = 30;
-
-  double currentCost = estimateMakespan(inst, currentSol, mcSamplesFast);
+  double currentCost = estimateMakespan(inst, currentSol, mcSamples);
 
   vector<int> bestSol = currentSol;
   double bestCost = currentCost;
@@ -114,7 +119,7 @@ vector<int> simulatedAnnealing(const ProblemInstance& inst) {
       int b = distIdx(rng);
       swap(neighbor[a], neighbor[b]);
 
-      double neighborCost = estimateMakespan(inst, neighbor, mcSamplesFast);
+      double neighborCost = estimateMakespan(inst, neighbor, mcSamples);
 
       double delta = neighborCost - currentCost;
 
@@ -149,13 +154,20 @@ vector<int> simulatedAnnealing(const ProblemInstance& inst) {
 int main(int argc, char* argv[]) {
   string filename;
 
-  if (argc < 2) {
+  if (argc < 3) {
     cerr << "Użycie: " << (argc ? argv[0] : "program") << " <plik_wejsciowy>"
-         << endl;
+         << " <ilosc probek do estymacji>" << endl;
     return 1;
   }
 
   filename = argv[1];
+  int samples = stoi(argv[2]);
+
+  if (samples > 2000 || samples < 1) {
+    cerr << "Blad: Ilosc probek powinna byc z zakresu [1, 2000]." << endl;
+    return 1;
+  }
+
   ProblemInstance problem;
 
   cout << "Wczytywanie danych z " << filename << "..." << endl;
@@ -167,9 +179,9 @@ int main(int argc, char* argv[]) {
   cout << "Zaladowano instancje: " << problem.n_jobs << " zadan, "
        << problem.n_machines << " maszyn." << endl;
 
-  vector<int> bestPermutation = simulatedAnnealing(problem);
+  vector<int> bestPermutation = simulatedAnnealing(problem, samples);
 
-  double finalResult = estimateMakespan(problem, bestPermutation, 1000);
+  double finalResult = estimateMakespan(problem, bestPermutation, samples);
 
   cout << "\n--- WYNIKI ---" << endl;
   cout << "Najlepszy znaleziony Makespan (estymowany): " << finalResult << endl;
