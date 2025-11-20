@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#define DEBUG 1
+
 using namespace std;
 
 struct Job {
@@ -57,7 +59,7 @@ class ProblemInstance {
 
 double estimateMakespan(const ProblemInstance& inst,
                         const vector<int>& permutation, int samples = 50) {
-  static mt19937 rng(42);
+  mt19937 rng(42);
   double totalMakespan = 0.0;
 
   for (int k = 0; k < samples; k++) {
@@ -109,8 +111,10 @@ vector<int> simulatedAnnealing(const ProblemInstance& inst, int mcSamples) {
   uniform_real_distribution<double> dist01(0.0, 1.0);
   uniform_int_distribution<int> distIdx(0, inst.n_jobs - 1);
 
-  cout << "Start SA. Koszt poczatkowy: " << currentCost << ", T0: " << T
-       << endl;
+  if (DEBUG) {
+    cout << "Start SA. Koszt poczatkowy: " << currentCost << ", T0: " << T
+         << endl;
+  }
 
   while (T > T_end) {
     for (int i = 0; i < iterPerTemp; i++) {
@@ -138,9 +142,17 @@ vector<int> simulatedAnnealing(const ProblemInstance& inst, int mcSamples) {
         currentCost = neighborCost;
 
         if (currentCost < bestCost) {
-          bestCost = currentCost;
-          bestSol = currentSol;
-          cout << "Nowy rekord: " << bestCost << " (T=" << T << ")" << endl;
+          if (bestSol != currentSol) {
+            bestCost = currentCost;
+            bestSol = currentSol;
+            if (DEBUG) {
+              cout << "Nowy rekord: " << bestCost << " (T=" << T << ")" << endl;
+              for (int id : bestSol) {
+                cout << id << " ";
+              }
+              cout << endl;
+            }
+          }
         }
       }
     }
@@ -170,22 +182,31 @@ int main(int argc, char* argv[]) {
 
   ProblemInstance problem;
 
-  cout << "Wczytywanie danych z " << filename << "..." << endl;
+  if (DEBUG) {
+    cout << "Wczytywanie danych z " << filename << "..." << endl;
+  }
+
   if (!problem.loadFromFile(filename)) {
     cerr << "Blad: Nie znaleziono pliku!" << endl;
     return 1;
   }
 
-  cout << "Zaladowano instancje: " << problem.n_jobs << " zadan, "
-       << problem.n_machines << " maszyn." << endl;
+  if (DEBUG) {
+    cout << "Zaladowano instancje: " << problem.n_jobs << " zadan, "
+         << problem.n_machines << " maszyn." << endl;
+  }
 
   vector<int> bestPermutation = simulatedAnnealing(problem, samples);
 
   double finalResult = estimateMakespan(problem, bestPermutation, samples);
 
-  cout << "\n--- WYNIKI ---" << endl;
-  cout << "Najlepszy znaleziony Makespan (estymowany): " << finalResult << endl;
-  cout << "Kolejnosc zadan: ";
+  if (DEBUG) {
+    cout << "\n--- WYNIKI ---" << endl;
+    cout << "Najlepszy znaleziony Makespan (estymowany): " << finalResult
+         << endl;
+    cout << "Kolejnosc zadan: ";
+  }
+
   for (int id : bestPermutation) {
     cout << id << " ";
   }

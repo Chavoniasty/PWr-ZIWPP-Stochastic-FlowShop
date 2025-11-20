@@ -36,5 +36,3 @@ if __name__ == "__main__":
     generate_sfsp_instance("dane_male.txt", n_jobs=5, n_machines=3)
     generate_sfsp_instance("dane_srednie.txt", n_jobs=20, n_machines=5)
     generate_sfsp_instance("dane_duze.txt", n_jobs=50, n_machines=10)
-    
-    print("\nGotowe! Pliki .txt zostały utworzone.")
