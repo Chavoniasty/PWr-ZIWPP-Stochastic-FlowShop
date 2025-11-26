@@ -19,17 +19,20 @@ struct Job {
 };
 
 class ProblemInstance {
- public:
+public:
   int n_jobs;
   int n_machines;
   vector<Job> jobs;
 
-  bool loadFromFile(const string& filename) {
+  bool loadFromFile(const string &filename) {
     ifstream file(filename);
-    if (!file.is_open()) return false;
+    if (!file.is_open()) {
+      return false;
+    }
 
-    if (!(file >> n_jobs >> n_machines)) return false;
-
+    if (!(file >> n_jobs >> n_machines)) {
+      return false;
+    }
     if (n_jobs <= 0 || n_machines <= 0 || n_jobs > 100000 ||
         n_machines > 1000) {
       cerr << "BLAD: Podejrzane wymiary: " << n_jobs << "x" << n_machines
@@ -57,26 +60,25 @@ class ProblemInstance {
   }
 };
 
-double estimateMakespan(const ProblemInstance& inst,
-                        const vector<int>& permutation, int samples = 50) {
+double estimateMakespan(const ProblemInstance &inst,
+                        const vector<int> &permutation, int samples,
+                        bool isCtg) {
   mt19937 rng(42);
   double totalMakespan = 0.0;
 
   for (int k = 0; k < samples; k++) {
     vector<double> machineFreeTime(inst.n_machines, 0.0);
-
     for (int jobIdx : permutation) {
-      const Job& job = inst.jobs[jobIdx];
-
+      const Job &job = inst.jobs[jobIdx];
       double prevMachineFinishTime = 0.0;
-
       for (int m = 0; m < inst.n_machines; m++) {
-        normal_distribution<double> dist(job.means[m], job.stds[m]);
-        double processingTime = dist(rng);
-        if (processingTime < 0.001) processingTime = 0.001;
-
+        double processingTime;
+        if (isCtg) {
+          processingTime = job.means[m];
+        } else {
+          processingTime = max(0.001, normal_distribution<double>(job.means[m], job.stds[m])(rng));
+        }
         double startTime = max(machineFreeTime[m], prevMachineFinishTime);
-
         machineFreeTime[m] = startTime + processingTime;
         prevMachineFinishTime = machineFreeTime[m];
       }
@@ -88,16 +90,17 @@ double estimateMakespan(const ProblemInstance& inst,
   return totalMakespan / samples;
 }
 
-double calculateInitialTemperature(const ProblemInstance& inst, vector<int>& p,
+double calculateInitialTemperature(const ProblemInstance &inst, vector<int> &p,
                                    double initialCost) {
   return initialCost * 0.05;
 }
 
-vector<int> simulatedAnnealing(const ProblemInstance& inst, int mcSamples) {
+vector<int> simulatedAnnealing(const ProblemInstance &inst, int mcSamples,
+                               bool isCtg) {
   vector<int> currentSol(inst.n_jobs);
   iota(currentSol.begin(), currentSol.end(), 0);
 
-  double currentCost = estimateMakespan(inst, currentSol, mcSamples);
+  double currentCost = estimateMakespan(inst, currentSol, mcSamples, isCtg);
 
   vector<int> bestSol = currentSol;
   double bestCost = currentCost;
@@ -123,7 +126,7 @@ vector<int> simulatedAnnealing(const ProblemInstance& inst, int mcSamples) {
       int b = distIdx(rng);
       swap(neighbor[a], neighbor[b]);
 
-      double neighborCost = estimateMakespan(inst, neighbor, mcSamples);
+      double neighborCost = estimateMakespan(inst, neighbor, mcSamples, isCtg);
 
       double delta = neighborCost - currentCost;
 
@@ -163,7 +166,32 @@ vector<int> simulatedAnnealing(const ProblemInstance& inst, int mcSamples) {
   return bestSol;
 }
 
-int main(int argc, char* argv[]) {
+vector<int> bruteForce(const ProblemInstance &inst, int mcSamples, bool isCtg) {
+  vector<int> currentSol(inst.n_jobs);
+  iota(currentSol.begin(), currentSol.end(), 0);
+
+  vector<int> bestSol = currentSol;
+  double bestCost = estimateMakespan(inst, bestSol, mcSamples, isCtg);
+
+  do {
+    double cost = estimateMakespan(inst, currentSol, mcSamples, isCtg);
+    if (cost <= bestCost) {
+      bestCost = cost;
+      bestSol = currentSol;
+      if (DEBUG) {
+        cout << "Nowy rekord: " << bestCost << endl;
+        for (int id : bestSol) {
+          cout << id << " ";
+        }
+        cout << endl;
+      }
+    }
+  } while (std::next_permutation(currentSol.begin(), currentSol.end()));
+
+  return bestSol;
+}
+
+int main(int argc, char *argv[]) {
   string filename;
 
   if (argc < 3) {
@@ -175,13 +203,17 @@ int main(int argc, char* argv[]) {
   filename = argv[1];
   int samples = stoi(argv[2]);
 
+  bool isCtg = false;
+  if (argc >= 4 && std::string(argv[3]) == "-ctg") {
+    isCtg = true;
+  }
   if (samples > 2000 || samples < 1) {
     cerr << "Blad: Ilosc probek powinna byc z zakresu [1, 2000]." << endl;
     return 1;
   }
-
   ProblemInstance problem;
 
+  cout << "Wczytywanie danych" << endl;
   if (DEBUG) {
     cout << "Wczytywanie danych z " << filename << "..." << endl;
   }
@@ -196,9 +228,11 @@ int main(int argc, char* argv[]) {
          << problem.n_machines << " maszyn." << endl;
   }
 
-  vector<int> bestPermutation = simulatedAnnealing(problem, samples);
+  vector<int> bestPermutation = bruteForce(problem, samples, isCtg);
+  // vector<int> bestPermutation = simulatedAnnealing(problem, samples, isCtg);
 
-  double finalResult = estimateMakespan(problem, bestPermutation, samples);
+  double finalResult =
+      estimateMakespan(problem, bestPermutation, samples, isCtg);
 
   if (DEBUG) {
     cout << "\n--- WYNIKI ---" << endl;
