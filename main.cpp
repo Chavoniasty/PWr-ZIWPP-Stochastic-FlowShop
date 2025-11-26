@@ -260,23 +260,24 @@ vector<int> NEH(const ProblemInstance &inst, int mcSamples, bool isCtg) {
 int main(int argc, char *argv[]) {
   string filename;
 
-  if (argc < 3) {
-    cerr << "Użycie: " << (argc ? argv[0] : "program") << " <plik_wejsciowy>"
-         << " <ilosc probek do estymacji>" << endl;
+  if (argc < 4) {
+    cerr << "Użycie: " << (argc ? argv[0] : "program") 
+         << " <plik_wejsciowy> <ilosc probek> <algorytm: bf|sa|neh> [-ctg]" << endl;
     return 1;
   }
 
   filename = argv[1];
   int samples = stoi(argv[2]);
+  string algorithm = argv[3];
 
   bool isCtg = false;
-  if (argc >= 4 && std::string(argv[3]) == "-ctg") {
+  if (argc >= 5 && std::string(argv[4]) == "-ctg") {
     isCtg = true;
     samples = 1;
   }
 
-  if (samples > 2000 || samples < 1) {
-    cerr << "Blad: Ilosc probek powinna byc z zakresu [1, 2000]." << endl;
+  if (samples > 3000 || samples < 1) {
+    cerr << "Blad: Ilosc probek powinna byc z zakresu [1, 3000]." << endl;
     return 1;
   }
   ProblemInstance problem;
@@ -296,9 +297,26 @@ int main(int argc, char *argv[]) {
          << problem.n_machines << " maszyn." << endl;
   }
 
-  // vector<int> bestPermutation = bruteForce(problem, samples, isCtg);
-  // vector<int> bestPermutation = simulatedAnnealing(problem, samples, isCtg);
-  vector<int> bestPermutation = NEH(problem, samples, isCtg);
+  vector<int> bestPermutation;
+  
+  if (algorithm == "bf") {
+      cout << "Uruchamianie Brute Force..." << endl;
+      bestPermutation = bruteForce(problem, samples, isCtg);
+  } 
+  else if (algorithm == "sa") {
+      cout << "Uruchamianie Symulowanego Wyżarzania..." << endl;
+      bestPermutation = simulatedAnnealing(problem, samples, isCtg);
+  } 
+  else if (algorithm == "neh") {
+      cout << "Uruchamianie NEH..." << endl;
+      bestPermutation = NEH(problem, samples, isCtg);
+  } 
+  else {
+      cerr << "Blad: Nieznany algorytm: " << algorithm << endl;
+      cerr << "Dostepne opcje: bf, sa, neh" << endl;
+      return 1;
+  }
+
   double finalResult =
       estimateMakespan(problem, bestPermutation, samples, isCtg);
 
