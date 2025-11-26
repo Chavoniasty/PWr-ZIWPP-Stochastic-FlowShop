@@ -76,7 +76,9 @@ double estimateMakespan(const ProblemInstance &inst,
         if (isCtg) {
           processingTime = job.means[m];
         } else {
-          processingTime = max(0.001, normal_distribution<double>(job.means[m], job.stds[m])(rng));
+          processingTime =
+              max(0.001,
+                  normal_distribution<double>(job.means[m], job.stds[m])(rng));
         }
         double startTime = max(machineFreeTime[m], prevMachineFinishTime);
         machineFreeTime[m] = startTime + processingTime;
@@ -88,6 +90,36 @@ double estimateMakespan(const ProblemInstance &inst,
   }
 
   return totalMakespan / samples;
+}
+
+double estimateMakespanForJob(const ProblemInstance &inst, int jobId,
+                              int samples, bool isCtg) {
+  const Job &job = inst.jobs[jobId];
+
+  if (isCtg) {
+    double sum = 0.0;
+    for (auto mean : job.means) {
+      sum += mean;
+    }
+    return sum;
+  }
+
+  mt19937 rng(42);
+  double sum = 0.0;
+  for (int k = 0; k < samples; k++) {
+    double jobTime = 0.0;
+    for (int m = 0; m < inst.n_machines; m++) {
+      normal_distribution<double> dist(job.means[m], job.stds[m]);
+      double processingTime = max(
+          0.001, normal_distribution<double>(job.means[m], job.stds[m])(rng));
+
+      jobTime += processingTime;
+    }
+
+    sum += jobTime;
+  }
+
+  return sum / samples;
 }
 
 double calculateInitialTemperature(const ProblemInstance &inst, vector<int> &p,
@@ -191,6 +223,40 @@ vector<int> bruteForce(const ProblemInstance &inst, int mcSamples, bool isCtg) {
   return bestSol;
 }
 
+vector<int> nehSortOrder(const ProblemInstance &inst, int samples, bool isCtg) {
+  vector<int> order(inst.n_jobs);
+  iota(order.begin(), order.end(), 0);
+
+  sort(order.begin(), order.end(), [&](int a, int b) {
+    return estimateMakespanForJob(inst, a, samples, isCtg) >
+           estimateMakespanForJob(inst, b, samples, isCtg);
+  });
+
+  return order;
+}
+
+vector<int> NEH(const ProblemInstance &inst, int mcSamples, bool isCtg) {
+  vector<int> sortedJobs = nehSortOrder(inst, mcSamples, isCtg);
+  vector<int> currentSol;
+
+  for (auto &task : sortedJobs) {
+    int bestTime = 100000;
+    int bestIndex = 0;
+    for (int i = 0; i <= currentSol.size(); i++) {
+      currentSol.insert(currentSol.begin() + i, task);
+      int time = estimateMakespan(inst, currentSol, mcSamples, isCtg);
+      if (time < bestTime) {
+        bestTime = time;
+        bestIndex = i;
+      }
+      currentSol.erase(currentSol.begin() + i);
+    }
+    currentSol.insert(currentSol.begin() + bestIndex, task);
+  }
+
+  return currentSol;
+}
+
 int main(int argc, char *argv[]) {
   string filename;
 
@@ -206,7 +272,9 @@ int main(int argc, char *argv[]) {
   bool isCtg = false;
   if (argc >= 4 && std::string(argv[3]) == "-ctg") {
     isCtg = true;
+    samples = 1;
   }
+
   if (samples > 2000 || samples < 1) {
     cerr << "Blad: Ilosc probek powinna byc z zakresu [1, 2000]." << endl;
     return 1;
@@ -228,9 +296,9 @@ int main(int argc, char *argv[]) {
          << problem.n_machines << " maszyn." << endl;
   }
 
-  vector<int> bestPermutation = bruteForce(problem, samples, isCtg);
+  // vector<int> bestPermutation = bruteForce(problem, samples, isCtg);
   // vector<int> bestPermutation = simulatedAnnealing(problem, samples, isCtg);
-
+  vector<int> bestPermutation = NEH(problem, samples, isCtg);
   double finalResult =
       estimateMakespan(problem, bestPermutation, samples, isCtg);
 
