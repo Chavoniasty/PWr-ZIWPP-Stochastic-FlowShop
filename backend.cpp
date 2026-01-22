@@ -105,7 +105,7 @@ void reportProgress(const ProblemInstance &inst, const vector<int>& sol, double 
     cb(reportSol.data(), cost, sched.data());
 }
 
-vector<int> simulatedAnnealing(const ProblemInstance &inst, int mcSamples, bool isCtg, StatusCallback cb) {
+vector<int> simulatedAnnealing(const ProblemInstance &inst, int mcSamples, bool isCtg, double* params, StatusCallback cb) {
     vector<int> currentSol(inst.n_jobs);
     iota(currentSol.begin(), currentSol.end(), 0);
 
@@ -115,10 +115,15 @@ vector<int> simulatedAnnealing(const ProblemInstance &inst, int mcSamples, bool 
 
     reportProgress(inst, bestSol, bestCost, cb);
 
-    double T = currentCost * 0.05;
+    // Pobieranie parametrów przekazanych z Pythona
+    // params[0] = Temperatura początkowa (jeśli 0, to oblicz automatycznie)
+    // params[1] = Współczynnik chłodzenia (Alpha)
+    // params[2] = Iteracje na temperaturę
+    
+    double T = (params[0] > 0) ? params[0] : (currentCost * 0.05); // Default lub Custom
+    double alpha = (params[1] > 0) ? params[1] : 0.97;
+    int iterPerTemp = (params[2] > 0) ? (int)params[2] : 100;
     double T_end = 0.1;
-    double alpha = 0.97;
-    int iterPerTemp = 100;
 
     mt19937 rng(random_device{}());
     uniform_real_distribution<double> dist01(0.0, 1.0);
@@ -127,10 +132,13 @@ vector<int> simulatedAnnealing(const ProblemInstance &inst, int mcSamples, bool 
     while (T > T_end) {
         for (int i = 0; i < iterPerTemp; i++) {
             vector<int> neighbor = currentSol;
+            // Prosta zamiana dwóch losowych zadań
             swap(neighbor[distIdx(rng)], neighbor[distIdx(rng)]);
+            
             double neighborCost = estimateMakespan(inst, neighbor, mcSamples, isCtg);
             double delta = neighborCost - currentCost;
 
+            // Kryterium akceptacji Metropolisa
             if (delta < 0 || dist01(rng) < exp(-delta / T)) {
                 currentSol = neighbor;
                 currentCost = neighborCost;
@@ -194,7 +202,9 @@ vector<int> NEH(const ProblemInstance &inst, int mcSamples, bool isCtg, StatusCa
 extern "C" {
     void run_algorithm(
         int n_jobs, int n_machines, double* means, double* stds,
-        int algo, int samples, bool is_ctg, int* output,
+        int algo, int samples, bool is_ctg, 
+        double* params,
+        int* output,
         StatusCallback cb
     ) {
         ProblemInstance p;
@@ -202,7 +212,7 @@ extern "C" {
 
         vector<int> result;
         if (algo == 0)      result = bruteForce(p, samples, is_ctg, cb);
-        else if (algo == 1) result = simulatedAnnealing(p, samples, is_ctg, cb);
+        else if (algo == 1) result = simulatedAnnealing(p, samples, is_ctg, params, cb);
         else                result = NEH(p, samples, is_ctg, cb);
 
         for (size_t i = 0; i < result.size(); i++) output[i] = result[i] + 1;
