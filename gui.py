@@ -10,7 +10,6 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PyQt6.QtCore import QThread, pyqtSignal, Qt, QUrl, QRectF
 from PyQt6.QtGui import QPainter, QColor, QFont, QDragEnterEvent, QDropEvent
 
-# --- 1. WORKER THREAD ---
 class OptimizerWorker(QThread):
     update_signal = pyqtSignal(list, float, list)
     finished_signal = pyqtSignal()
@@ -51,7 +50,6 @@ class OptimizerWorker(QThread):
         schedule = [sched_ptr[i] for i in range(total_doubles)]
         self.update_signal.emit(perm, cost, schedule)
 
-# --- 2. GANTT CHART VISUALIZER ---
 class GanttChartWidget(QWidget):
     def __init__(self):
         super().__init__()
@@ -60,7 +58,7 @@ class GanttChartWidget(QWidget):
         self.n_machines = 0
         self.makespan = 0
         self.job_colors = {}
-        self.setFixedHeight(300) # Trochę wyższy dla lepszej czytelności
+        self.setFixedHeight(300)
         self.setStyleSheet("background-color: #ffffff; border: 1px solid #ccc; border-radius: 8px;")
 
     def update_data(self, n_jobs, n_machines, schedule, makespan):
@@ -95,7 +93,6 @@ class GanttChartWidget(QWidget):
         font = QFont("Segoe UI", 8)
         painter.setFont(font)
 
-        # Rysowanie linii maszyn
         for m in range(self.n_machines):
             y = 10 + m * machine_height
             painter.setPen(QColor("#333"))
@@ -104,7 +101,6 @@ class GanttChartWidget(QWidget):
             painter.setPen(QColor("#eee"))
             painter.drawLine(margin_left, int(y), w, int(y))
 
-        # Rysowanie klocków zadań
         for j in range(self.n_jobs):
             color = self.job_colors.get(j+1, QColor("gray"))
             painter.setBrush(color)
@@ -127,12 +123,11 @@ class GanttChartWidget(QWidget):
                     painter.setPen(QColor("white"))
                     painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, str(j+1))
 
-# --- 3. DRAG DROP AREA ---
 class DragDropArea(QLabel):
     file_dropped = pyqtSignal(str)
     def __init__(self):
         super().__init__()
-        self.setText("📂\nDrag & Drop .txt file here\nor click to browse")
+        self.setText("📂\nPrzeciągnij i upuść plik .txt tutaj\nlub kliknij, aby wybrać")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setAcceptDrops(True)
         self.setObjectName("DropZone")
@@ -144,12 +139,12 @@ class DragDropArea(QLabel):
         if e.mimeData().urls():
             self.file_dropped.emit(e.mimeData().urls()[0].toLocalFile())
 
-# --- 4. MAIN WINDOW ---
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Flow Shop Gantt Solver")
-        self.resize(1100, 850) # Zwiększyłem lekko wysokość
+        self.setWindowTitle("Harmonogramowanie Flow Shop (Gantt)")
+        self.resize(1100, 850)
 
         lib_name = "./scheduler.so" if platform.system() != "Windows" else "scheduler.dll"
         self.lib = ctypes.CDLL(os.path.abspath(lib_name))
@@ -201,59 +196,51 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(main)
         layout = QVBoxLayout(main)
 
-        # 1. Drop Zone
         self.drop = DragDropArea()
         self.drop.file_dropped.connect(self.parse_file)
         layout.addWidget(self.drop)
 
-        # 2. Panel Sterowania
         panel = QFrame()
         panel.setObjectName("Control")
         p_layout = QHBoxLayout(panel)
 
         self.combo = QComboBox()
-        self.combo.addItems(["Brute Force", "Simulated Annealing", "NEH"])
+        self.combo.addItems(["Przegląd zupełny (Brute Force)", "Symulowane Wyżarzanie", "NEH"])
         self.combo.setCurrentIndex(1)
         self.combo.currentIndexChanged.connect(self.toggle_params)
 
         self.inp_samples = QLineEdit("50")
         self.inp_samples.setFixedWidth(50)
-        self.chk_ctg = QCheckBox("Deterministic")
+        self.chk_ctg = QCheckBox("Deterministyczny")
 
-        p_layout.addWidget(QLabel("Algorithm:"))
+        p_layout.addWidget(QLabel("Algorytm:"))
         p_layout.addWidget(self.combo)
-        p_layout.addWidget(QLabel("MC Samples:"))
+        p_layout.addWidget(QLabel("Próbki MC:"))
         p_layout.addWidget(self.inp_samples)
         p_layout.addWidget(self.chk_ctg)
         
-        # Grupa Parametrów
-        self.grp_params = QGroupBox("SA Parameters")
+        self.grp_params = QGroupBox("Parametry SA")
         self.grp_params.setStyleSheet("QGroupBox { font-weight: bold; border: 1px solid #ccc; border-radius: 5px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px; }")
         param_layout = QHBoxLayout(self.grp_params)
 
-        # Init Temp
         self.spin_temp = QDoubleSpinBox()
         self.spin_temp.setRange(0, 10000)
         self.spin_temp.setValue(0) 
         
-        # --- ZMIANA: Gdy wartość wynosi 0, wyświetl "Auto" ---
         self.spin_temp.setSpecialValueText("Auto")
-        # ----------------------------------------------------
         
-        self.spin_temp.setToolTip("Initial Temperature (Set to 0 for automatic calculation)")
-        param_layout.addWidget(QLabel("Init Temp:"))
+        self.spin_temp.setToolTip("Temperatura początkowa (Ustaw 0 dla automatycznego obliczenia)")
+        param_layout.addWidget(QLabel("Temp. Pocz.:"))
         param_layout.addWidget(self.spin_temp)
 
-        # Alpha (Cooling)
         self.spin_alpha = QDoubleSpinBox()
         self.spin_alpha.setRange(0.8, 0.999)
         self.spin_alpha.setSingleStep(0.001)
         self.spin_alpha.setDecimals(3)
         self.spin_alpha.setValue(0.970)
-        param_layout.addWidget(QLabel("Alpha:"))
+        param_layout.addWidget(QLabel("Alfa:"))
         param_layout.addWidget(self.spin_alpha)
 
-        # Iterations
         self.spin_iter = QSpinBox()
         self.spin_iter.setRange(10, 5000)
         self.spin_iter.setValue(100)
@@ -263,28 +250,25 @@ class MainWindow(QMainWindow):
         p_layout.addWidget(self.grp_params)
 
         p_layout.addStretch()
-        self.btn_run = QPushButton("RUN")
+        self.btn_run = QPushButton("URUCHOM")
         self.btn_run.clicked.connect(self.start)
         p_layout.addWidget(self.btn_run)
         
         layout.addWidget(panel)
 
-        # 3. Wyniki
-        self.lbl_res = QLabel("Best Makespan: ---")
+        self.lbl_res = QLabel("Najlepszy Czas: ---")
         self.lbl_res.setStyleSheet("font-size: 18px; font-weight: bold; color: #e74c3c;")
         layout.addWidget(self.lbl_res)
 
         self.gantt = GanttChartWidget()
         layout.addWidget(self.gantt)
 
-        # --- NOWOŚĆ: Pole wyświetlania sekwencji ---
-        layout.addWidget(QLabel("Best Job Sequence:"))
+        layout.addWidget(QLabel("Najlepsza sekwencja zadań:"))
         self.txt_seq = QLineEdit()
         self.txt_seq.setReadOnly(True)
-        self.txt_seq.setPlaceholderText("Sequence will appear here...")
+        self.txt_seq.setPlaceholderText("Sekwencja pojawi się tutaj...")
         self.txt_seq.setStyleSheet("font-size: 12px; color: #2c3e50; background: #ecf0f1;")
         layout.addWidget(self.txt_seq)
-        # -------------------------------------------
 
         self.toggle_params()
 
@@ -295,14 +279,13 @@ class MainWindow(QMainWindow):
 
     def start(self):
         if not self.means: 
-            QMessageBox.warning(self, "Warn", "Load file first")
+            QMessageBox.warning(self, "Uwaga", "Najpierw wczytaj plik z danymi")
             return
             
         self.btn_run.setEnabled(False)
-        self.btn_run.setText("Running...")
+        self.btn_run.setText("Przetwarzanie...")
         
-        # Reset pola sekwencji
-        self.txt_seq.setText("Calculating...")
+        self.txt_seq.setText("Obliczanie...")
 
         algo_idx = self.combo.currentIndex()
         params = [self.spin_temp.value(), self.spin_alpha.value(), float(self.spin_iter.value())]
@@ -314,69 +297,114 @@ class MainWindow(QMainWindow):
             algo_idx, samples, self.chk_ctg.isChecked(), params
         )
         self.worker.update_signal.connect(self.on_update)
-        # Podpięcie nowej metody finished
         self.worker.finished_signal.connect(self.on_execution_finished)
         self.worker.start()
 
     def on_update(self, perm, cost, schedule):
         self.final_makespan = cost
-        self.lbl_res.setText(f"Best Makespan: {cost:.2f}")
+        self.lbl_res.setText(f"Najlepszy Czas: {cost:.2f}")
         self.gantt.update_data(self.n_jobs, self.n_machines, schedule, cost)
         
-        # --- NOWOŚĆ: Formatowanie i wyświetlanie sekwencji na żywo ---
-        # perm zawiera ID zadań (np. [1, 5, 2...])
-        seq_str = " -> ".join(map(str, perm))
+        formatted_perm = []
+        for job_id in perm:
+            if 1 <= job_id <= self.n_jobs:
+                formatted_perm.append(str(job_id))
+            else:
+                formatted_perm.append("X") # Puste miejsce oznaczamy jako X
+        
+        seq_str = " -> ".join(formatted_perm)
         self.txt_seq.setText(seq_str)
 
-    # --- NOWOŚĆ: Metoda wywoływana po zakończeniu obliczeń ---
     def on_execution_finished(self):
-        self.btn_run.setText("RUN")
+        self.btn_run.setText("URUCHOM")
         self.btn_run.setEnabled(True)
         
-        # Wyświetlenie Popup'u
         msg = QMessageBox(self)
-        msg.setWindowTitle("Optimization Finished")
-        msg.setText("Algorithm completed successfully!")
-        msg.setInformativeText(f"Final Makespan: {self.final_makespan:.2f}\n\nCheck the sequence field for job order.")
+        msg.setWindowTitle("Zakończono optymalizację")
+        msg.setText("Algorytm zakończył działanie pomyślnie!")
+        msg.setInformativeText(f"Końcowy Czas (Makespan): {self.final_makespan:.2f}\n\nSprawdź pole sekwencji dla kolejności zadań.")
         msg.setIcon(QMessageBox.Icon.Information)
         msg.exec()
 
     def parse_file(self, fn):
         if fn == "BROWSE": 
-            fn, _ = QFileDialog.getOpenFileName(self, "Open File", "", "Text Files (*.txt)")
+            fn, _ = QFileDialog.getOpenFileName(self, "Otwórz plik", "", "Pliki tekstowe (*.txt)")
         if not fn: return
 
         try:
             with open(fn, 'r') as f:
-                content = f.read()
-                tokens = content.split()
+                lines = f.readlines()
 
-            if not tokens: raise ValueError("The file is empty.")
-            iterator = iter(tokens)
+            lines = [line.strip() for line in lines if line.strip()]
+
+            if not lines: 
+                raise ValueError("Plik jest pusty.")
+            
+            first_line = lines[0]
+            header_parts = first_line.split()
+
+            if len(header_parts) != 2:
+                raise ValueError(
+                    f"Błąd w pierwszym wierszu pliku (nagłówku).\n"
+                    f"Wymagane są dokładnie DWIE liczby (liczba zadań i maszyn).\n"
+                    f"Znaleziono {len(header_parts)} element(y): '{first_line}'"
+                )
 
             try:
-                n_jobs = int(next(iterator))
-                n_machines = int(next(iterator))
-            except: raise ValueError("Invalid header.")
+                self.n_jobs = int(header_parts[0])
+                self.n_machines = int(header_parts[1])
+            except ValueError:
+                raise ValueError(
+                    f"Błąd w nagłówku.\n"
+                    f"Oczekiwano liczb całkowitych, a znaleziono tekst.\n"
+                    f"Wartości w pierwszej linii: '{header_parts[0]}' i '{header_parts[1]}'"
+                )
 
-            expected_count = n_jobs * n_machines
-            if len(tokens) < 2 + expected_count:
-                raise ValueError(f"Insufficient data. Expected {expected_count}.")
+            rest_of_content = " ".join(lines[1:])
+            tokens = rest_of_content.split()
+            iterator = iter(tokens)
 
+            expected_count = self.n_jobs * self.n_machines
             self.means = []
-            for _ in range(expected_count): self.means.append(float(next(iterator)))
+            
+            for i in range(expected_count):
+                try:
+                    token = next(iterator)
+                except StopIteration:
+                    raise ValueError(
+                        f"Plik skończył się niespodziewanie.\n"
+                        f"Wczytano {len(self.means)} liczb, a na podstawie nagłówka ({self.n_jobs}x{self.n_machines}) oczekiwano {expected_count}.\n"
+                        f"Brakuje {expected_count - len(self.means)} wartości."
+                    )
+                
+                try:
+                    self.means.append(float(token))
+                except ValueError:
+                    raise ValueError(
+                        f"Błąd danych przy wartości nr {i+1} (po nagłówku).\n"
+                        f"Program oczekiwał liczby (czasu zadania), a napotkał tekst:\n\n"
+                        f"👉 '{token}'\n\n"
+                        f"Sprawdź treść pliku poniżej pierwszego wiersza."
+                    )
 
             self.stds = []
-            remaining_tokens = len(tokens) - (2 + expected_count)
-            if remaining_tokens == 0: self.stds = [0.0] * expected_count
-            elif remaining_tokens == expected_count:
-                for _ in range(expected_count): self.stds.append(float(next(iterator)))
-            else: raise ValueError("Data mismatch in Standard Deviations.")
-
-            self.n_jobs = n_jobs
-            self.n_machines = n_machines
+            remaining = list(iterator)
             
-            self.drop.setText(f"✅ Loaded: {os.path.basename(fn)}\n({self.n_jobs} Jobs, {self.n_machines} Machines)")
+            if len(remaining) == 0:
+                self.stds = [0.0] * expected_count
+            elif len(remaining) == expected_count:
+                for token in remaining:
+                    try:
+                        self.stds.append(float(token))
+                    except ValueError:
+                        raise ValueError(f"Błąd w sekcji odchyleń standardowych. Znaleziono tekst: '{token}'")
+            else:
+                raise ValueError(
+                    f"Błędna ilość danych na końcu pliku.\n"
+                    f"Zostało {len(remaining)} liczb, a oczekiwano 0 (brak odchyleń) lub {expected_count} (odchylenia)."
+                )
+
+            self.drop.setText(f"✅ Wczytano: {os.path.basename(fn)}\n({self.n_jobs} Zadań, {self.n_machines} Maszyn)")
             self.drop.setStyleSheet("""
                 QLabel#DropZone {
                     border: 2px solid #2ecc71;
@@ -387,7 +415,7 @@ class MainWindow(QMainWindow):
             """)
 
         except ValueError as e:
-            self.drop.setText("❌ File Error")
+            self.drop.setText("❌ Błąd Danych")
             self.drop.setStyleSheet("""
                 QLabel#DropZone {
                     border: 2px dashed #e74c3c;
@@ -396,9 +424,10 @@ class MainWindow(QMainWindow):
                     font-weight: bold;
                 }
             """)
-            QMessageBox.warning(self, "Data Error", str(e))
+            QMessageBox.warning(self, "Błąd w pliku", str(e))
+
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            QMessageBox.critical(self, "Błąd Krytyczny", f"Nieoczekiwany błąd:\n{str(e)}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
