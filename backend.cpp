@@ -138,7 +138,6 @@ vector<int> simulatedAnnealing(const ProblemInstance &inst, int mcSamples, bool 
             double neighborCost = estimateMakespan(inst, neighbor, mcSamples, isCtg);
             double delta = neighborCost - currentCost;
 
-            // Kryterium akceptacji Metropolisa
             if (delta < 0 || dist01(rng) < exp(-delta / T)) {
                 currentSol = neighbor;
                 currentCost = neighborCost;

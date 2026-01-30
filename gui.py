@@ -378,6 +378,12 @@ class MainWindow(QMainWindow):
                     )
                 
                 try:
+                    if float(token) < 0:
+                        raise ValueError(
+                            f"Błąd danych przy wartości nr {i+1} (po nagłówku).\n"
+                            f"Czasy zadań nie mogą być ujemne.\n"
+                            f"Napotkano wartość: '{token}'"
+                        )
                     self.means.append(float(token))
                 except ValueError:
                     raise ValueError(
@@ -395,6 +401,8 @@ class MainWindow(QMainWindow):
             elif len(remaining) == expected_count:
                 for token in remaining:
                     try:
+                        if float(token) < 0:
+                            raise ValueError(f"Błąd w sekcji odchyleń standardowych. Odchylenia nie mogą być ujemne. Znaleziono: '{token}'")
                         self.stds.append(float(token))
                     except ValueError:
                         raise ValueError(f"Błąd w sekcji odchyleń standardowych. Znaleziono tekst: '{token}'")
